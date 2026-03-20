@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard – Pick-A-Book</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{background:#f1f5f9}
+.navbar{background:#0a2540;color:#fff;padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.navbar h2{font-size:17px}
+.nav-links a{color:#fff;text-decoration:none;margin-left:16px;padding:7px 14px;border-radius:6px;font-size:14px;transition:.2s}
+.nav-links a:hover{background:#1e3c72}
+.logout-btn{background:#dc2626!important}.logout-btn:hover{background:#b91c1c!important}
+.page{padding:24px}
+.flash{background:#dcfce7;color:#15803d;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:14px}
+/* socket toast */
+#socket-toast{position:fixed;top:70px;right:20px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast{background:#0a2540;color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;min-width:240px;box-shadow:0 4px 14px rgba(0,0,0,.25);animation:fadeIn .3s ease;border-left:4px solid #2563eb}
+.toast.green{border-left-color:#16a34a}.toast.red{border-left-color:#dc2626}
+@keyframes fadeIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+/* socket indicator */
+#conn-dot{width:10px;height:10px;border-radius:50%;background:#94a3b8;display:inline-block;margin-left:8px;transition:background .4s}
+#conn-dot.connected{background:#22c55e}
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:#fff;border-radius:12px;padding:20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+.stat-card h3{color:#64748b;font-size:13px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.stat-card .num{font-size:36px;font-weight:700;color:#0a2540;transition:all .4s}
+.num.flash-update{color:#2563eb}
+/* main grid */
+.main-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px}
+.panel{background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+.panel h3{color:#0a2540;font-size:15px;font-weight:700;border-bottom:2px solid #f1f5f9;padding-bottom:10px;margin-bottom:16px}
+input,select,button{width:100%;padding:10px 12px;margin-bottom:10px;border:2px solid #e2e8f0;border-radius:7px;font-size:14px;outline:none;box-sizing:border-box}
+input:focus,select:focus{border-color:#2563eb}
+button{background:#0a2540;color:#fff;border:none;cursor:pointer;font-weight:700;transition:.2s}
+button:hover{background:#1e3c72}
+.search-btn{background:#16a34a}.search-btn:hover{background:#15803d}
+/* table */
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+thead th{background:#0a2540;color:#fff;padding:12px 14px;text-align:left;font-size:13px}
+tbody td{padding:11px 14px;border-bottom:1px solid #f1f5f9;font-size:13px}
+tbody tr:hover{background:#f8fafc}
+.return-btn{background:#16a34a;padding:6px 12px;width:auto;margin:0;font-size:12px}
+.return-btn:hover{background:#15803d}
+/* live pulse on new row */
+.new-row{animation:rowPulse .8s ease}
+@keyframes rowPulse{0%{background:#dbeafe}100%{background:transparent}}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <h2>📚 Pick-A-Book Library System <span id="conn-dot"></span></h2>
+  <div class="nav-links">
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('books_page') }}">Books</a>
+    <a href="{{ url_for('students_page') }}">Students</a>
+    <a href="{{ url_for('profile_page') }}">Profile</a>
+    <a href="{{ url_for('about_page') }}">About</a>
+    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+  </div>
+</div>
+
+<div id="socket-toast"></div>
+
+<div class="page">
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}{% for m in messages %}<div class="flash">✅ {{ m }}</div>{% endfor %}{% endif %}
+  {% endwith %}
+
+  <div class="stats">
+    <div class="stat-card"><h3>Total Books</h3><div class="num" id="stat-total-books">{{ total_books }}</div></div>
+    <div class="stat-card"><h3>Total Students</h3><div class="num" id="stat-total-students">{{ total_students }}</div></div>
+    <div class="stat-card"><h3>Borrowed Books</h3><div class="num" id="stat-borrowed-books">{{ borrowed_books }}</div></div>
+    <div class="stat-card"><h3>Available Books</h3><div class="num" id="stat-available-books">{{ available_books }}</div></div>
+  </div>
+
+  <div class="main-grid">
+    <div class="panel">
+      <h3>📖 Return Book (Search)</h3>
+      <input type="text" id="searchName" placeholder="Search student name…">
+      <button class="search-btn" onclick="searchStudent()">Search</button>
+      <div id="searchResults"></div>
+    </div>
+    <div class="panel">
+      <h3>➕ Borrow Book</h3>
+      <form action="{{ url_for('borrow_book') }}" method="POST">
+        <input type="text" name="student_id" placeholder="Student ID (e.g. 2024-0001)" required>
+        <input type="text" name="book_id"    placeholder="Book ID" required>
+        <button type="submit">Borrow Book</button>
+      </form>
+    </div>
+  </div>
+
+  <h3 style="margin-bottom:12px;color:#0a2540;font-size:15px">📋 Currently Borrowed Books</h3>
+  <table id="borrow-table">
+    <thead>
+      <tr>
+        <th>Student ID</th><th>Student Name</th><th>Book Title</th>
+        <th>Borrow Date</th><th>Due Date</th><th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="borrow-tbody">
+      {% for b in recent_borrowed %}
+      <tr>
+        <td>{{ b.student_code }}</td>
+        <td>{{ b.student_name }}</td>
+        <td>{{ b.book_title }}</td>
+        <td>{{ b.borrow_date }}</td>
+        <td>{{ b.due_date }}</td>
+        <td>
+          <form action="{{ url_for('return_book') }}" method="POST" style="margin:0">
+            <input type="hidden" name="borrow_id" value="{{ b.id }}">
+            <button type="submit" class="return-btn">Return</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+// ── Socket.IO ────────────────────────────────────────────────
+const socket = io();
+const dot    = document.getElementById('conn-dot');
+
+socket.on('connect',    () => dot.classList.add('connected'));
+socket.on('disconnect', () => dot.classList.remove('connected'));
+
+// ── Live dashboard_update ────────────────────────────────────
+socket.on('dashboard_update', data => {
+  setNum('stat-total-books',     data.total_books);
+  setNum('stat-total-students',  data.total_students);
+  setNum('stat-borrowed-books',  data.borrowed_books);
+  setNum('stat-available-books', data.available_books);
+  rebuildTable(data.borrows);
+});
+
+// ── Toast notifications ──────────────────────────────────────
+socket.on('borrow_event', d => {
+  showToast(`📖 Borrowed: "${d.book_title}" by ${d.student_name} — due ${d.due_date}`, 'green');
+});
+socket.on('return_event', d => {
+  showToast(`✅ Returned: "${d.book_title}"`, 'green');
+});
+socket.on('book_added', d => {
+  showToast(`📗 Book added: "${d.title}" by ${d.author}`);
+});
+socket.on('book_deleted', d => {
+  showToast(`🗑 Book #${d.book_id} deleted`, 'red');
+});
+socket.on('student_added', d => {
+  showToast(`🎓 Student added: ${d.name}`);
+});
+socket.on('student_deleted', d => {
+  showToast(`🗑 Student #${d.student_db_id} deleted`, 'red');
+});
+
+// ── Helpers ──────────────────────────────────────────────────
+function setNum(id, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = val;
+  el.classList.add('flash-update');
+  setTimeout(() => el.classList.remove('flash-update'), 800);
+}
+
+function rebuildTable(borrows) {
+  const tbody = document.getElementById('borrow-tbody');
+  if (!borrows || !borrows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:20px">No active borrows</td></tr>';
+    return;
+  }
+  tbody.innerHTML = borrows.map(b => `
+    <tr class="new-row">
+      <td>${b.student_code}</td>
+      <td>${b.student_name}</td>
+      <td>${b.book_title}</td>
+      <td>${b.borrow_date}</td>
+      <td>${b.due_date}</td>
+      <td>
+        <form action="/return" method="POST" style="margin:0">
+          <input type="hidden" name="borrow_id" value="${b.id}">
+          <button type="submit" class="return-btn">Return</button>
+        </form>
+      </td>
+    </tr>`).join('');
+}
+
+function showToast(msg, type = '') {
+  const container = document.getElementById('socket-toast');
+  const div = document.createElement('div');
+  div.className = `toast ${type}`;
+  div.textContent = msg;
+  container.appendChild(div);
+  setTimeout(() => div.remove(), 5000);
+}
+
+// ── Search student (AJAX) ────────────────────────────────────
+function searchStudent() {
+  const q = document.getElementById('searchName').value.trim();
+  if (!q) { alert('Enter a name to search'); return; }
+  fetch("{{ url_for('search_student') }}", {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name: q})
+  })
+  .then(r => r.json())
+  .then(data => {
+    const div = document.getElementById('searchResults');
+    if (!data.students.length) { div.innerHTML='<p style="color:#64748b;font-size:13px">No results</p>'; return; }
+    div.innerHTML = data.students.map(s => `
+      <div style="background:#f8fafc;border-radius:8px;padding:10px;margin-top:8px;font-size:13px">
+        <strong>${s.full_name}</strong> (${s.student_id})<br>
+        Book: ${s.book_title} — Due: ${s.due_date}
+        <form action="{{ url_for('return_book') }}" method="POST" style="margin-top:6px">
+          <input type="hidden" name="borrow_id" value="${s.borrow_id}">
+          <button type="submit" class="return-btn" style="width:auto;padding:5px 12px">Return</button>
+        </form>
+      </div>`).join('');
+  });
+}
+</script>
+</body>
+</html>

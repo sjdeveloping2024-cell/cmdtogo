@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pick-A-Book Library System</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a2540,#1e3c72);color:#fff;text-align:center;padding:20px}
+.logo{font-size:72px;margin-bottom:16px}
+h1{font-size:42px;font-weight:700;margin-bottom:8px}
+p{font-size:17px;color:rgba(255,255,255,.7);margin-bottom:36px}
+.btn-group{display:flex;gap:16px}
+.btn{padding:14px 36px;border-radius:10px;font-size:16px;font-weight:700;text-decoration:none;transition:.2s}
+.btn-primary{background:#fff;color:#0a2540}.btn-primary:hover{background:#e0e8ff}
+.btn-outline{border:2px solid #fff;color:#fff}.btn-outline:hover{background:rgba(255,255,255,.12)}
+</style>
+</head>
+<body>
+<div class="logo">📚</div>
+<h1>Pick-A-Book</h1>
+<p>A simple and efficient library management system</p>
+<div class="btn-group">
+  <a href="{{ url_for('login_page') }}" class="btn btn-primary">Librarian Login</a>
+  <a href="{{ url_for('registration_page') }}" class="btn btn-outline">Register</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>About – Pick-A-Book</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{background:#f1f5f9}
+.navbar{background:#0a2540;color:#fff;padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.navbar h2{font-size:17px}
+.nav-links a{color:#fff;text-decoration:none;margin-left:16px;padding:7px 14px;border-radius:6px;font-size:14px;transition:.2s}
+.nav-links a:hover{background:#1e3c72}
+.logout-btn{background:#dc2626!important}
+.page{padding:40px;max-width:680px;margin:auto}
+.card{background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+h1{color:#0a2540;font-size:24px;margin-bottom:16px}
+p{color:#64748b;line-height:1.7;margin-bottom:12px;font-size:14px}
+</style>
+</head>
+<body>
+<div class="navbar">
+  <h2>📚 Pick-A-Book</h2>
+  <div class="nav-links">
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('books_page') }}">Books</a>
+    <a href="{{ url_for('students_page') }}">Students</a>
+    <a href="{{ url_for('profile_page') }}">Profile</a>
+    <a href="{{ url_for('about_page') }}">About</a>
+    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+  </div>
+</div>
+<div class="page">
+  <div class="card">
+    <h1>📚 About Pick-A-Book</h1>
+    <p>Pick-A-Book is a full-stack library management system built with Flask, MySQL, Socket.IO, and Expo React Native.</p>
+    <p><strong>Version:</strong> 2.0.0 — Socket.IO Edition</p>
+    <p><strong>Features:</strong> Real-time dashboard updates via WebSocket, book inventory management, student management, borrow/return tracking with due dates, Arduino LCD integration, and a student mobile app.</p>
+    <p><strong>Default login:</strong> admin@pickabook.com / admin123</p>
+  </div>
+</div>
+</body>
+</html>

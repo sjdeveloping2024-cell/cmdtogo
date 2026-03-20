@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Students – Pick-A-Book</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{background:#f1f5f9}
+.navbar{background:#0a2540;color:#fff;padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.navbar h2{font-size:17px}
+.nav-links a{color:#fff;text-decoration:none;margin-left:16px;padding:7px 14px;border-radius:6px;font-size:14px;transition:.2s}
+.nav-links a:hover{background:#1e3c72}
+.logout-btn{background:#dc2626!important}
+#conn-dot{width:10px;height:10px;border-radius:50%;background:#94a3b8;display:inline-block;margin-left:8px}
+#conn-dot.connected{background:#22c55e}
+#socket-toast{position:fixed;top:70px;right:20px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast{background:#0a2540;color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;min-width:220px;box-shadow:0 4px 14px rgba(0,0,0,.25);animation:fadeIn .3s;border-left:4px solid #2563eb}
+.toast.green{border-left-color:#16a34a}.toast.red{border-left-color:#dc2626}
+@keyframes fadeIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.page{padding:24px}
+.flash{background:#dcfce7;color:#15803d;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:14px}
+.flash.error{background:#fee2e2;color:#b91c1c;border-color:#fca5a5}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.header h1{font-size:20px;color:#0a2540}
+.search-form{display:flex;gap:8px}
+.search-form input{padding:9px 12px;border:2px solid #e2e8f0;border-radius:7px;font-size:14px;outline:none;width:280px}
+.search-form button{padding:9px 16px;background:#0a2540;color:#fff;border:none;border-radius:7px;cursor:pointer;font-weight:700}
+.add-form{background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+.add-form h3{color:#0a2540;margin-bottom:6px}
+.add-form .hint{font-size:12px;color:#64748b;margin-bottom:14px}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+input,button{padding:10px 12px;border:2px solid #e2e8f0;border-radius:7px;font-size:14px;outline:none;width:100%;box-sizing:border-box}
+input:focus{border-color:#2563eb}
+input.invalid{border-color:#dc2626;background:#fff5f5}
+button{background:#0a2540;color:#fff;border:none;cursor:pointer;font-weight:700}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+thead th{background:#0a2540;color:#fff;padding:12px 14px;text-align:left;font-size:13px}
+tbody td{padding:11px 14px;border-bottom:1px solid #f1f5f9;font-size:13px}
+tbody tr:hover{background:#f8fafc}
+.del-btn{background:#dc2626;padding:6px 12px;width:auto;margin:0;font-size:12px}
+.del-btn:hover{background:#b91c1c}
+.sid-hint{font-size:11px;color:#94a3b8;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="navbar">
+  <h2>📚 Students Management <span id="conn-dot"></span></h2>
+  <div class="nav-links">
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('books_page') }}">Books</a>
+    <a href="{{ url_for('students_page') }}">Students</a>
+    <a href="{{ url_for('profile_page') }}">Profile</a>
+    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+  </div>
+</div>
+
+<div id="socket-toast"></div>
+
+<div class="page">
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}{% for m in messages %}<div class="flash">✅ {{ m }}</div>{% endfor %}{% endif %}
+  {% endwith %}
+
+  <div class="header">
+    <h1>👥 Registered Students</h1>
+    <form class="search-form" action="{{ url_for('students_page') }}" method="GET">
+      <input type="search" name="search" placeholder="Search name, ID or email…" value="{{ search_query or '' }}">
+      <button type="submit">Search</button>
+    </form>
+  </div>
+
+  <div class="add-form">
+    <h3>➕ Add New Student</h3>
+    <p class="hint">Student ID must be in format <strong>00-0000-000000</strong> (e.g. 24-0001-000001)</p>
+    <form action="{{ url_for('add_student') }}" method="POST" onsubmit="return validateStudentForm(this)">
+      <div class="form-grid">
+        <div>
+          <input type="text" name="full_name" placeholder="Full Name" required>
+        </div>
+        <div>
+        <input type="text" id="sid-input" name="student_id"
+              placeholder="00-0000-000000"
+              maxlength="14"
+              title="Format: 00-0000-000000 (e.g. 24-0001-000001)"
+              oninput="formatSid(this)"
+              required>
+          <div class="sid-hint" id="sid-hint">Format: 00-0000-000000</div>
+        </div>
+        <input type="email"  name="email"      placeholder="Email (optional)">
+        <input type="text"   name="course"     placeholder="Course (e.g. BSIT)">
+        <input type="number" name="year_level" placeholder="Year Level" min="1" max="5">
+        <button type="submit">Add Student</button>
+      </div>
+    </form>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Student ID</th><th>Full Name</th><th>Email</th><th>Course</th><th>Year</th><th>Registered</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      {% for s in students %}
+      <tr>
+        <td>{{ s.student_id }}</td><td>{{ s.full_name }}</td>
+        <td>{{ s.email }}</td><td>{{ s.course }}</td>
+        <td>{{ s.year_level }}</td><td>{{ s.created_at }}</td>
+        <td>
+          <form action="{{ url_for('delete_student') }}" method="POST" style="margin:0"
+                onsubmit="return confirm('Delete this student?')">
+            <input type="hidden" name="student_id" value="{{ s.id }}">
+            <button type="submit" class="del-btn">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+// ── Socket.IO (polling only) ──────────────────────────────────
+const socket = io({ transports: ['polling'] });
+const dot = document.getElementById('conn-dot');
+socket.on('connect',    () => dot.classList.add('connected'));
+socket.on('disconnect', () => dot.classList.remove('connected'));
+
+function showToast(msg, type='') {
+  const c = document.getElementById('socket-toast');
+  const d = document.createElement('div');
+  d.className=`toast ${type}`; d.textContent=msg;
+  c.appendChild(d); setTimeout(()=>d.remove(),5000);
+}
+socket.on('student_added',   d => showToast(`🎓 Student added: ${d.name}`, 'green'));
+socket.on('student_deleted', d => { showToast('🗑 Student deleted','red'); setTimeout(()=>location.reload(),1500); });
+socket.on('borrow_event',    d => showToast(`📖 Borrowed: "${d.book_title}" by ${d.student_name}`));
+socket.on('return_event',    d => showToast(`✅ Returned: "${d.book_title}"`, 'green'));
+
+// ── Student ID validation ─────────────────────────────────────
+const SID_RE = /^\d{2}-\d{4}-\d{6}$/;
+
+function formatSid(input) {
+  let v = input.value.replace(/\D/g, ''); // digits only
+  if (v.length > 2)  v = v.slice(0,2)  + '-' + v.slice(2);
+  if (v.length > 7)  v = v.slice(0,7)  + '-' + v.slice(7);
+  if (v.length > 14) v = v.slice(0,14);
+  input.value = v;
+  validateSid(input);
+}
+
+function validateSid(input) {
+  const hint = document.getElementById('sid-hint');
+  if (!input.value) {
+    input.classList.remove('invalid');
+    hint.style.color = '#94a3b8';
+    hint.textContent = 'Format: 00-0000-000000';
+    return;
+  }
+  if (SID_RE.test(input.value)) {
+    input.classList.remove('invalid');
+    hint.style.color = '#16a34a';
+    hint.textContent = '✓ Valid format';
+  } else {
+    input.classList.add('invalid');
+    hint.style.color = '#dc2626';
+    hint.textContent = '✗ Must be 00-0000-000000 (e.g. 24-0001-000001)';
+  }
+}
+
+function validateStudentForm(form) {
+  const sid = form.querySelector('#sid-input').value.trim();
+  if (!SID_RE.test(sid)) {
+    alert('Student ID must be in format 00-0000-000000\nExample: 24-0001-000001');
+    return false;
+  }
+  return true;
+}
+</script>
+</body>
+</html>

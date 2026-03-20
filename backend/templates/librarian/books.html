@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Books – Pick-A-Book</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{background:#f1f5f9}
+.navbar{background:#0a2540;color:#fff;padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.navbar h2{font-size:17px}
+.nav-links a{color:#fff;text-decoration:none;margin-left:16px;padding:7px 14px;border-radius:6px;font-size:14px;transition:.2s}
+.nav-links a:hover{background:#1e3c72}
+.logout-btn{background:#dc2626!important}
+#conn-dot{width:10px;height:10px;border-radius:50%;background:#94a3b8;display:inline-block;margin-left:8px}
+#conn-dot.connected{background:#22c55e}
+#socket-toast{position:fixed;top:70px;right:20px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast{background:#0a2540;color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;min-width:220px;box-shadow:0 4px 14px rgba(0,0,0,.25);animation:fadeIn .3s;border-left:4px solid #2563eb}
+.toast.green{border-left-color:#16a34a}.toast.red{border-left-color:#dc2626}
+@keyframes fadeIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.page{padding:24px}
+.flash{background:#dcfce7;color:#15803d;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:14px}
+.add-form{background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+.add-form h3{color:#0a2540;margin-bottom:14px}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+input,button{padding:10px 12px;border:2px solid #e2e8f0;border-radius:7px;font-size:14px;outline:none;width:100%;box-sizing:border-box}
+input:focus{border-color:#2563eb}
+button{background:#0a2540;color:#fff;border:none;cursor:pointer;font-weight:700;transition:.2s}
+button:hover{background:#1e3c72}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+thead th{background:#0a2540;color:#fff;padding:12px 14px;text-align:left;font-size:13px}
+tbody td{padding:11px 14px;border-bottom:1px solid #f1f5f9;font-size:13px}
+tbody tr:hover{background:#f8fafc}
+.available{color:#16a34a;font-weight:700}.unavailable{color:#dc2626;font-weight:700}
+.del-btn{background:#dc2626;padding:6px 12px;width:auto;margin:0;font-size:12px}
+.del-btn:hover{background:#b91c1c}
+</style>
+</head>
+<body>
+<div class="navbar">
+  <h2>📚 Books Management <span id="conn-dot"></span></h2>
+  <div class="nav-links">
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('books_page') }}">Books</a>
+    <a href="{{ url_for('students_page') }}">Students</a>
+    <a href="{{ url_for('profile_page') }}">Profile</a>
+    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+  </div>
+</div>
+
+<div id="socket-toast"></div>
+
+<div class="page">
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}{% for m in messages %}<div class="flash">✅ {{ m }}</div>{% endfor %}{% endif %}
+  {% endwith %}
+
+  <div class="add-form">
+    <h3>➕ Add New Book</h3>
+    <form action="{{ url_for('add_book') }}" method="POST">
+      <div class="form-grid">
+        <input type="text"   name="title"    placeholder="Book Title"  required>
+        <input type="text"   name="author"   placeholder="Author"      required>
+        <input type="text"   name="isbn"     placeholder="ISBN">
+        <input type="text"   name="category" placeholder="Category">
+        <input type="number" name="quantity" placeholder="Quantity" value="1" min="1">
+        <button type="submit">Add Book</button>
+      </div>
+    </form>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Title</th><th>Author</th><th>ISBN</th><th>Category</th><th>Total</th><th>Available</th><th>Status</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      {% for b in books %}
+      <tr>
+        <td>{{ b.id }}</td><td>{{ b.title }}</td><td>{{ b.author }}</td>
+        <td>{{ b.isbn }}</td><td>{{ b.category }}</td>
+        <td>{{ b.quantity }}</td><td>{{ b.available }}</td>
+        <td class="{{ 'available' if b.status=='Available' else 'unavailable' }}">{{ b.status }}</td>
+        <td>
+          <form action="{{ url_for('delete_book') }}" method="POST" style="margin:0"
+                onsubmit="return confirm('Delete this book?')">
+            <input type="hidden" name="book_id" value="{{ b.id }}">
+            <button type="submit" class="del-btn">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+const socket = io();
+const dot    = document.getElementById('conn-dot');
+socket.on('connect',    () => dot.classList.add('connected'));
+socket.on('disconnect', () => dot.classList.remove('connected'));
+
+function showToast(msg, type='') {
+  const c = document.getElementById('socket-toast');
+  const d = document.createElement('div');
+  d.className = `toast ${type}`; d.textContent = msg;
+  c.appendChild(d); setTimeout(()=>d.remove(), 5000);
+}
+socket.on('book_added',   d => showToast(`📗 Book added: "${d.title}"`, 'green'));
+socket.on('book_deleted', d => { showToast(`🗑 Book deleted`, 'red'); setTimeout(()=>location.reload(), 1500); });
+socket.on('borrow_event', d => showToast(`📖 Borrowed: "${d.book_title}"`));
+socket.on('return_event', d => showToast(`✅ Returned: "${d.book_title}"`, 'green'));
+</script>
+</body>
+</html>

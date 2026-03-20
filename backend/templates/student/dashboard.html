@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My Books – Pick-A-Book</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{background:#f1f5f9}
+.topbar{background:#0a2540;padding:0 24px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.brand{color:#fff;font-size:16px;font-weight:700}
+.topbar-right{display:flex;align-items:center;gap:14px}
+.user-name{color:rgba(255,255,255,.75);font-size:13px}
+.user-name strong{color:#fff}
+.logout-a{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;padding:7px 14px;border-radius:7px;font-size:13px;text-decoration:none;transition:.2s}
+.logout-a:hover{background:rgba(255,255,255,.22)}
+#conn-dot{width:9px;height:9px;border-radius:50%;background:#94a3b8;display:inline-block;margin-left:6px}
+#conn-dot.connected{background:#22c55e}
+.page{max-width:960px;margin:0 auto;padding:22px 18px 60px}
+.flash{background:#dcfce7;color:#15803d;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:14px}
+/* banners */
+.banner{border-radius:11px;padding:13px 16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:10px;font-size:14px;animation:slideIn .4s ease}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.banner.overdue{background:#fee2e2;border:1px solid #fca5a5;color:#b91c1c}
+.banner.soon{background:#fef3c7;border:1px solid #fde68a;color:#92400e}
+.banner-icon{font-size:19px;flex-shrink:0}
+.banner-body strong{display:block;font-size:14px;margin-bottom:2px}
+.banner-body p{font-size:12px;opacity:.85}
+/* welcome */
+.welcome{background:linear-gradient(135deg,#0a2540,#1e3c72);border-radius:14px;padding:22px;display:flex;align-items:center;gap:16px;margin-bottom:14px}
+.avatar{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+.welcome-text h2{color:#fff;font-size:18px;margin-bottom:3px}
+.welcome-text p{color:rgba(255,255,255,.65);font-size:12px}
+.welcome-meta{margin-left:auto;text-align:right;font-size:12px;color:rgba(255,255,255,.6);line-height:1.9}
+.welcome-meta span{color:#fff;font-weight:700}
+/* section title */
+.sec{font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.7px;margin:16px 0 12px}
+/* book cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.card{background:#fff;border-radius:13px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.07);border-top:4px solid #2563eb;transition:transform .15s,box-shadow .15s}
+.card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.11)}
+.card.overdue{border-top-color:#dc2626}.card.soon{border-top-color:#d97706}.card.ok{border-top-color:#16a34a}
+.book-title{font-size:15px;font-weight:700;color:#0a2540;margin-bottom:2px}
+.book-author{font-size:12px;color:#64748b;margin-bottom:13px}
+.meta-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:13px}
+.meta-item{background:#f1f5f9;border-radius:7px;padding:8px 10px}
+.meta-lbl{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}
+.meta-val{font-size:12px;font-weight:700;color:#0a2540}
+.timer-box{background:#f8fafc;border-radius:9px;padding:13px;text-align:center}
+.timer-lbl{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.timer-val{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:1px;color:#16a34a}
+.timer-val.yellow{color:#d97706}.timer-val.red{color:#dc2626;animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.badge{display:inline-block;margin-top:7px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.badge-ok{background:#dcfce7;color:#16a34a}.badge-soon{background:#fef3c7;color:#d97706}.badge-overdue{background:#fee2e2;color:#dc2626}
+/* empty */
+.empty{background:#fff;border-radius:13px;padding:44px;text-align:center;color:#94a3b8;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.empty .ei{font-size:44px;margin-bottom:10px}
+.empty h3{color:#0a2540;font-size:16px;margin-bottom:5px}
+/* settings */
+.settings{background:#fff;border-radius:13px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+.settings-hdr{background:#0a2540;color:#fff;padding:15px 20px;cursor:pointer;display:flex;align-items:center;gap:10px;user-select:none}
+.settings-hdr h3{flex:1;font-size:15px}
+.chevron{transition:transform .3s;font-size:18px}
+.settings-hdr.open .chevron{transform:rotate(180deg)}
+.settings-body{padding:22px;display:none}
+.settings-body.open{display:block}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:540px){.fg{grid-template-columns:1fr}}
+.field label{display:block;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.field input,.field select{width:100%;padding:11px 13px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;transition:.2s;box-sizing:border-box}
+.field input:focus,.field select:focus{border-color:#2563eb}
+.save-btn{margin-top:18px;padding:12px 24px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;transition:.2s}
+.save-btn:hover{background:#1d4ed8}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">📚 Pick-A-Book <span id="conn-dot"></span></div>
+  <div class="topbar-right">
+    <span class="user-name">Logged in as <strong>{{ student.full_name }}</strong></span>
+    <a href="{{ url_for('student_logout') }}" class="logout-a">Logout</a>
+  </div>
+</div>
+
+<div class="page">
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}{% for m in messages %}<div class="flash">✅ {{ m }}</div>{% endfor %}{% endif %}
+  {% endwith %}
+
+  <!-- Notification banners (populated by JS) -->
+  <div id="banners"></div>
+
+  <!-- Welcome -->
+  <div class="welcome">
+    <div class="avatar">🎓</div>
+    <div class="welcome-text">
+      <h2>Hello, {{ student.full_name.split()[0] }}! 👋</h2>
+      <p>Welcome to your Pick-A-Book student portal</p>
+    </div>
+    <div class="welcome-meta">
+      <div>ID: <span>{{ student.student_id }}</span></div>
+      <div>Course: <span>{{ student.course or '—' }}</span></div>
+      <div>Year: <span>{{ student.year_level or '—' }}</span></div>
+    </div>
+  </div>
+
+  <!-- Borrowed books -->
+  <div class="sec">📖 Your Borrowed Books</div>
+  <div id="books-area">
+    {% if borrows %}
+    <div class="cards" id="cards-grid">
+      {% for b in borrows %}
+      <div class="card {% if b.days_remaining < 0 %}overdue{% elif b.days_remaining <= 2 %}soon{% else %}ok{% endif %}"
+           data-id="{{ b.id }}" data-due="{{ b.due_date }}">
+        <div class="book-title">{{ b.book_title }}</div>
+        <div class="book-author">{{ b.author }}</div>
+        <div class="meta-row">
+          <div class="meta-item"><div class="meta-lbl">Borrowed</div><div class="meta-val">{{ b.borrow_date }}</div></div>
+          <div class="meta-item"><div class="meta-lbl">Due Date</div><div class="meta-val">{{ b.due_date }}</div></div>
+        </div>
+        <div class="timer-box">
+          <div class="timer-lbl">⏱ Time Remaining</div>
+          <div class="timer-val" id="timer-{{ b.id }}">--:--:--</div>
+          <div class="badge
+            {% if b.days_remaining < 0 %}badge-overdue{% elif b.days_remaining <= 2 %}badge-soon{% else %}badge-ok{% endif %}"
+            id="badge-{{ b.id }}">
+            {% if b.days_remaining < 0 %}Overdue{% elif b.days_remaining <= 2 %}Due Soon{% else %}On Time{% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty"><div class="ei">📭</div><h3>No borrowed books</h3><p>Visit the library to borrow one!</p></div>
+    {% endif %}
+  </div>
+
+  <!-- Settings -->
+  <div class="sec">⚙️ Account Settings</div>
+  <div class="settings">
+    <div class="settings-hdr" id="settingsToggle">
+      <span>⚙️</span><h3>Edit Your Profile</h3><span class="chevron">▼</span>
+    </div>
+    <div class="settings-body" id="settingsBody">
+      <form action="{{ url_for('student_settings') }}" method="POST">
+        <div class="fg">
+          <div class="field"><label>Full Name</label><input type="text"   name="full_name"  value="{{ student.full_name }}" required></div>
+          <div class="field"><label>Student ID</label><input type="text"   name="student_id" value="{{ student.student_id }}" required></div>
+          <div class="field"><label>Email</label>     <input type="email"  name="email"      value="{{ student.email or '' }}"></div>
+          <div class="field"><label>Course</label>    <input type="text"   name="course"     value="{{ student.course or '' }}" placeholder="e.g. BSIT"></div>
+          <div class="field">
+            <label>Year Level</label>
+            <select name="year_level">
+              <option value="">— Select —</option>
+              {% for y in range(1,6) %}
+              <option value="{{ y }}" {% if student.year_level == y %}selected{% endif %}>Year {{ y }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="save-btn">💾 Save Changes</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Socket.IO ────────────────────────────────────────────────
+const socket = io();
+const dot    = document.getElementById('conn-dot');
+const STUDENT_DB_ID = {{ session['student_db_id'] }};
+
+socket.on('connect', () => {
+  dot.classList.add('connected');
+  // join personal room for targeted updates
+  socket.emit('join_student_room', { student_id: STUDENT_DB_ID });
+});
+socket.on('disconnect', () => dot.classList.remove('connected'));
+
+// Live borrow update (librarian borrowed/returned a book for THIS student)
+socket.on('student_borrows_update', data => {
+  updateBorrowCards(data.borrows);
+});
+
+// ── Countdown engine ─────────────────────────────────────────
+const secondsMap = {};   // borrow_id → seconds remaining
+
+function dueDateToSeconds(dueDateStr) {
+  const [y,m,d] = dueDateStr.split('-').map(Number);
+  return Math.floor((new Date(y,m-1,d,23,59,59) - Date.now()) / 1000);
+}
+
+function formatTime(s) {
+  if (s <= 0) return 'OVERDUE';
+  const d = Math.floor(s/86400), h = Math.floor((s%86400)/3600),
+        m = Math.floor((s%3600)/60), sec = s%60;
+  if (d > 0) return `${d}d ${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m`;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// Init timers from page-rendered cards
+document.querySelectorAll('[data-due]').forEach(card => {
+  const id  = card.dataset.id;
+  const due = card.dataset.due;
+  secondsMap[id] = dueDateToSeconds(due);
+});
+
+function tick() {
+  const bannerContainer = document.getElementById('banners');
+  const overdueBanners  = [], soonBanners = [];
+
+  Object.keys(secondsMap).forEach(id => {
+    const s     = secondsMap[id];
+    const timer = document.getElementById(`timer-${id}`);
+    const badge = document.getElementById(`badge-${id}`);
+    const card  = timer ? timer.closest('.card') : null;
+    if (!timer) return;
+
+    timer.textContent = formatTime(s);
+
+    if (s <= 0) {
+      timer.className = 'timer-val red';
+      if (badge) { badge.className = 'badge badge-overdue'; badge.textContent = 'Overdue'; }
+      if (card)  { card.className = card.className.replace(/\bok\b|\bsoon\b/,'').trim() + ' overdue'; }
+    } else if (s <= 172800) {
+      timer.className = 'timer-val yellow';
+      if (badge) { badge.className = 'badge badge-soon'; badge.textContent = 'Due Soon'; }
+    } else {
+      timer.className = 'timer-val';
+    }
+
+    if (s > 0) secondsMap[id]--;
+
+    // collect for banners
+    const titleEl = timer.closest('.card')?.querySelector('.book-title');
+    const title   = titleEl ? titleEl.textContent : 'Book';
+    const dueEl   = timer.closest('.card')?.querySelector('[data-due]');
+    const due     = dueEl ? dueEl.dataset.due : '';
+
+    if (s <= 0)       overdueBanners.push({title, due: document.getElementById(`badge-${id}`) ? timer.closest('.card')?.dataset?.due || '' : ''});
+    else if (s<=172800) soonBanners.push({title, hrs: Math.ceil(s/3600)});
+  });
+
+  // render banners
+  bannerContainer.innerHTML = [
+    ...overdueBanners.map(b=>`
+      <div class="banner overdue">
+        <span class="banner-icon">🔴</span>
+        <div class="banner-body"><strong>Overdue Book!</strong><p>"${b.title}" must be returned immediately!</p></div>
+      </div>`),
+    ...soonBanners.map(b=>`
+      <div class="banner soon">
+        <span class="banner-icon">⚠️</span>
+        <div class="banner-body"><strong>Due Soon!</strong><p>"${b.title}" is due in ~${b.hrs}h.</p></div>
+      </div>`),
+  ].join('');
+}
+
+tick();
+setInterval(tick, 1000);
+
+// Rebuild cards when socket pushes an update
+function updateBorrowCards(borrows) {
+  const area = document.getElementById('books-area');
+  if (!borrows || !borrows.length) {
+    area.innerHTML = '<div class="empty"><div class="ei">📭</div><h3>No borrowed books</h3><p>Visit the library to borrow one!</p></div>';
+    return;
+  }
+  area.innerHTML = `<div class="cards" id="cards-grid">${
+    borrows.map(b => {
+      const status = b.days_remaining < 0 ? 'overdue' : b.days_remaining <= 2 ? 'soon' : 'ok';
+      secondsMap[b.id] = b.seconds_remaining;
+      return `
+        <div class="card ${status}" data-id="${b.id}" data-due="${b.due_date}">
+          <div class="book-title">${b.book_title}</div>
+          <div class="book-author">${b.author}</div>
+          <div class="meta-row">
+            <div class="meta-item"><div class="meta-lbl">Borrowed</div><div class="meta-val">${b.borrow_date}</div></div>
+            <div class="meta-item"><div class="meta-lbl">Due Date</div><div class="meta-val">${b.due_date}</div></div>
+          </div>
+          <div class="timer-box">
+            <div class="timer-lbl">⏱ Time Remaining</div>
+            <div class="timer-val" id="timer-${b.id}">--:--:--</div>
+            <div class="badge badge-${status}" id="badge-${b.id}">
+              ${status==='overdue'?'Overdue':status==='soon'?'Due Soon':'On Time'}
+            </div>
+          </div>
+        </div>`;
+    }).join('')
+  }</div>`;
+}
+
+// ── Settings toggle ──────────────────────────────────────────
+const toggle = document.getElementById('settingsToggle');
+const body   = document.getElementById('settingsBody');
+toggle.addEventListener('click', () => {
+  const open = body.classList.toggle('open');
+  toggle.classList.toggle('open', open);
+});
+{% with messages = get_flashed_messages() %}{% if messages %}
+body.classList.add('open'); toggle.classList.add('open');
+{% endif %}{% endwith %}
+</script>
+</body>
+</html>
